@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1
 # Build the frontend and binary from this checkout; no published image is required.
 FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS frontend
+# Optional heap cap for small build hosts, e.g. --build-arg NODE_OPTIONS=--max-old-space-size=1536
+ARG NODE_OPTIONS=
 WORKDIR /src/web
 COPY web/package*.json ./
 RUN npm ci
@@ -32,6 +34,13 @@ RUN npm install -g @playwright/mcp@latest @playwright/cli@latest playwright@late
     && playwright-cli --help \
     && playwright install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/*
+# Claude Code CLI for the claude-code provider. Sign in once with your own Claude
+# subscription: docker compose exec -it scopeweaver claude, then /login. The
+# sign-in lives in the claude_home volume; the version is pinned and self-update is off.
+ARG CLAUDE_CODE_VERSION=2.1.311
+RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} && claude --version
+ENV CLAUDE_CONFIG_DIR=/app/claude-home \
+    DISABLE_AUTOUPDATER=1
 WORKDIR /app
 COPY --from=backend /scopeweaver /app/scopeweaver
 # The supervisor forwards SIGTERM and restarts after a self-update.

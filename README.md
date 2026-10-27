@@ -109,6 +109,9 @@ it does not download or run a model. They send a 32K context (`num_ctx` 32,768),
 
 > Requires a **PostgreSQL** database. Exploration needs an **LLM** configured
 > (`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, a keyless Ollama profile, or set it in the UI).
+> With a Claude **Pro/Max subscription** and no API key, use the `claude-code` provider: it runs
+> each turn through the official Claude Code CLI signed in with your own subscription. See
+> [Claude Code (Claude subscription)](docs/llm-providers.md#claude-code-claude-subscription).
 
 ### Option 1: one-click install script (recommended)
 

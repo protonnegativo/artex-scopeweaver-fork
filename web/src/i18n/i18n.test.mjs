@@ -52,8 +52,9 @@ function checkCatalog(source, translated, locale) {
 }
 
 test("every shipped catalog is complete and preserves placeholders and rich tags", () => {
-  // 3266 shipped keys + 2 OpenCode Go provider template keys (providers.opencodeGo, providers.opencodeGoHelp).
-  assert.equal(Object.keys(catalogs.en).length, 3268);
+  // 3266 shipped keys + 2 OpenCode Go provider template keys (providers.opencodeGo, providers.opencodeGoHelp)
+  // + 4 Claude Code subscription keys (providers.claudeCode, claudeCodeHelp, claudeCodeFormat, claudeCodeFieldsHelp).
+  assert.equal(Object.keys(catalogs.en).length, 3272);
   assert.deepEqual(catalogLocales.sort(), [...LOCALES].sort());
   assert.deepEqual(Object.keys(catalogs).sort(), [...LOCALES].sort());
   for (const locale of LOCALES) checkCatalog(catalogs.en, catalogs[locale], locale);

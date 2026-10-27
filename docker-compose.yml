@@ -43,14 +43,20 @@ services:
       SCOPEWEAVER_LLM_MAX_CONCURRENT: ${SCOPEWEAVER_LLM_MAX_CONCURRENT:-${ARTEX_LLM_MAX_CONCURRENT:-}}
       SCOPEWEAVER_LOCAL_LLM_ONLY: ${SCOPEWEAVER_LOCAL_LLM_ONLY:-${ARTEX_LOCAL_LLM_ONLY:-false}}
       SCOPEWEAVER_LOCAL_LLM_ALLOWED_CIDRS: ${SCOPEWEAVER_LOCAL_LLM_ALLOWED_CIDRS:-${ARTEX_LOCAL_LLM_ALLOWED_CIDRS:-}}
+      # claude-code provider: concurrent CLI processes (default 1).
+      SCOPEWEAVER_CLAUDE_CODE_MAX_PROCS: ${SCOPEWEAVER_CLAUDE_CODE_MAX_PROCS:-1}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "8787:8787"
+      # Loopback by default: the UI controls agents that run shell commands. Set
+      # SCOPEWEAVER_BIND=0.0.0.0 only behind your own authentication/firewall.
+      - "${SCOPEWEAVER_BIND:-127.0.0.1}:8787:8787"
       - "127.0.0.1:8788:8788"
     volumes:
       - ./data:/app/data
       - ./skills:/app/skills
+      # Claude Code CLI sign-in (claude-code provider). Never mount your host ~/.claude here.
+      - claude_home:/app/claude-home
     restart: unless-stopped
 
   ollama:
@@ -68,3 +74,4 @@ services:
 volumes:
   pgdata:
   ollama_data:
+  claude_home:

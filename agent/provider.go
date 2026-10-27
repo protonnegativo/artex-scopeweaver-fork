@@ -161,7 +161,7 @@ func compactionConfig(windowTokens int) *compaction.Config {
 
 // FromEnv resolves the LLM provider config:
 //
-//	ARTEX_LLM_PROVIDER = anthropic|openai|opencode-go (default: inferred from keys)
+//	ARTEX_LLM_PROVIDER = anthropic|openai|opencode-go|claude-code (default: inferred from keys)
 //	ARTEX_LLM_MODEL    = model id        (default: per provider)
 //	ARTEX_LLM_BASE_URL = endpoint        (optional)
 //	ARTEX_LLM_PROXY    = proxy URL        (optional; http/https/socks5)
@@ -184,7 +184,8 @@ func FromEnv() (Config, bool) {
 	c := ConfigFrom(prov, file.Model, file.BaseURL, file.APIKey, file.Proxy)
 	// Native Ollama never falls back to a cloud credential.
 	_, explicitKey := runtimeconfig.LLMEnv("API_KEY")
-	if c.APIKey == "" && !explicitKey {
+	// claude-code uses the CLI's subscription sign-in and never takes a key.
+	if c.APIKey == "" && !explicitKey && c.Provider() != "claude-code" {
 		if prov == "opencode-go" {
 			// The wire format resolved to "openai", but the credential is the
 			// OpenCode subscription key — never OPENAI_API_KEY.
@@ -266,6 +267,16 @@ func ConfigFrom(provider, model, baseURL, apiKey, proxy string) Config {
 		if c.Model == "" {
 			c.Model = "glm-5.3-flash"
 		}
+	case "claude-code":
+		// Claude Code CLI with the operator's Claude subscription; it takes no
+		// endpoint or key (see provider_claudecode.go).
+		c.Format = claudeCodeFormat
+		c.BaseURL, c.APIKey, c.Proxy = "", "", ""
+		c.Stream = false
+		c.ContextWindowK = 200
+		if c.Model == "" {
+			c.Model = claudeCodeDefaultModel
+		}
 	case "openai-responses":
 		c.Format = llm.FormatOpenAIResponses
 		// provider appends "/responses"; tolerate a full endpoint URL.
@@ -299,6 +310,8 @@ func (c Config) Provider() string {
 	switch c.Format {
 	case llm.Format("ollama"):
 		return "ollama"
+	case claudeCodeFormat:
+		return "claude-code"
 	case llm.FormatOpenAI:
 		return "openai"
 	case llm.FormatOpenAIResponses:
@@ -311,6 +324,10 @@ func (c Config) Provider() string {
 // limiter lives on the single provider instance — so planner + all workers +
 // main agent (which share this provider) are bounded by one shared rate limit.
 func (c Config) NewProvider() (llm.Provider, error) {
+	// The Claude Code CLI makes its own connections; no HTTP client is involved.
+	if c.Provider() == "claude-code" {
+		return newClaudeCodeProvider(c)
+	}
 	client, err := c.HTTPClient()
 	if err != nil {
 		return nil, err
@@ -507,9 +524,10 @@ func requestBodySnapshot(req *http.Request) string {
 	return string(b)
 }
 
-// Ready allows keyless native Ollama and explicit local compatible servers.
+// Ready allows keyless native Ollama, explicit local compatible servers, and the
+// Claude Code CLI, which signs in with the operator's subscription instead of a key.
 func (c Config) Ready() bool {
-	return c.APIKey != "" || c.Provider() == "ollama" || llmnet.IsLocalEndpoint(c.BaseURL)
+	return c.APIKey != "" || c.Provider() == "ollama" || c.Provider() == "claude-code" || llmnet.IsLocalEndpoint(c.BaseURL)
 }
 
 // HTTPClient is shared by inference, metadata, diagnostics, and judge consumers.

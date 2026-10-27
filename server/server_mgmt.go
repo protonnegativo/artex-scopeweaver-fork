@@ -2030,6 +2030,11 @@ func (s *Server) pgListModels(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	cfg := s.applyLLMPolicy(agent.ConfigFrom(req.Provider, "", req.BaseURL, apiKey, req.Proxy))
+	if req.Provider == "claude-code" {
+		// The CLI has no model-list endpoint; offer the subscription's model ids.
+		writeJSON(w, 200, map[string]any{"ok": true, "models": agent.ClaudeCodeModels})
+		return
+	}
 	if req.Provider == "ollama" {
 		s.listOllamaModels(w, r, cfg)
 		return

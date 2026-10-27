@@ -35,6 +35,8 @@ test("cloud economy templates fill the documented endpoint, model and opt-in out
     // The opencode-go gateway template deliberately fills effort max at the user's request
     // and the required x-opencode-session header (HTTP 400 MissingSessionID without it).
     "opencode-go": ["openai", "https://opencode.ai/zen/go/v1", "glm-5.3-flash", "", "max", "", "x-opencode-session"],
+    // The Claude Code CLI uses the subscription sign-in on the server: no endpoint and no effort override.
+    "claude-code": ["claude-code", "", "claude-sonnet-5-5", "", "", ""],
   };
   for (const [id, [format, baseURL, model, thinking, effort, field, sessionHeader]] of Object.entries(expected)) {
     assert.ok(LLM_PROFILE_PRESET_IDS.includes(id), id);

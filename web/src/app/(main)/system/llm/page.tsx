@@ -61,9 +61,10 @@ const MAX_TOKENS_FIELD_HINTS: Record<string, string> = {
   get anthropic() { return swt("interface.m1332"); },
   get "openai-responses"() { return swt("interface.m1333"); },
   get ollama() { return swt("providers.maxTokensFieldOllama"); },
+  get "claude-code"() { return swt("providers.claudeCodeFieldsHelp"); },
 };
 type ProfileFormat = LLMProfile["format"];
-const FORMATS: readonly string[] = ["anthropic", "openai", "openai-responses", "ollama"];
+const FORMATS: readonly string[] = ["anthropic", "openai", "openai-responses", "ollama", "claude-code"];
 const ZAI_PRESETS = ["zai-general", "zai-coding-reference"] as const;
 const CLOUD_PRESETS = [
   { id: "deepseek", key: "providers.deepseek", help: "providers.deepseekHelp" },
@@ -73,6 +74,7 @@ const CLOUD_PRESETS = [
   { id: "kimi", key: "providers.kimi", help: "providers.kimiHelp" },
   { id: "openrouter", key: "providers.openrouter", help: "providers.openrouterHelp" },
   { id: "opencode-go", key: "providers.opencodeGo", help: "providers.opencodeGoHelp" },
+  { id: "claude-code", key: "providers.claudeCode", help: "providers.claudeCodeHelp" },
 ] as const;
 const OLLAMA_PRESETS = [
   { id: "ollama-host", key: "providers.ollamaHost", help: "providers.ollamaHostHelp" },
@@ -108,7 +110,7 @@ function cooldownText(secs: number) {
 // other states come from rotation circuit records. With rotation off, Healthy means no known failures.
 type Health = { label: string; cls: string; hint?: string };
 // Older servers omit api_key_optional; native Ollama was their only keyless format.
-const keyOptional = (p: LLMProfile) => p.api_key_optional ?? p.format === "ollama";
+const keyOptional = (p: LLMProfile) => p.api_key_optional ?? (p.format === "ollama" || p.format === "claude-code");
 function healthOf(p: LLMProfile, m?: LLMPoolMember): Health {
   if (!p.api_key_hint && !keyOptional(p)) {
     return {
@@ -698,6 +700,7 @@ function ProfileSheet({
                   <SelectItem value="openai">OpenAI (Chat Completions)</SelectItem>
                   <SelectItem value="openai-responses">OpenAI (Responses API)</SelectItem>
                   <SelectItem value="ollama">{swt("providers.ollamaFormat")}</SelectItem>
+                  <SelectItem value="claude-code">{swt("providers.claudeCodeFormat")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -780,54 +783,60 @@ function ProfileSheet({
             )}
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="p-base-url">{swt("interface.m1391")}</Label>
-            <Input
-              id="p-base-url"
-              className="font-mono"
-              placeholder="https://api.openai.com/v1"
-              value={baseUrl}
-              onChange={(e) => { invalidateModels(); setBaseUrl(e.target.value); }}
-            />
-          </div>
+          {format === "claude-code" ? (
+            <p className="text-muted-foreground text-xs">{swt("providers.claudeCodeFieldsHelp")}</p>
+          ) : (
+            <>
+              <div className="grid gap-2">
+                <Label htmlFor="p-base-url">{swt("interface.m1391")}</Label>
+                <Input
+                  id="p-base-url"
+                  className="font-mono"
+                  placeholder="https://api.openai.com/v1"
+                  value={baseUrl}
+                  onChange={(e) => { invalidateModels(); setBaseUrl(e.target.value); }}
+                />
+              </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="p-proxy">{swt("interface.m1392")}</Label>
-            <Input
-              id="p-proxy"
-              className="font-mono"
-              placeholder="socks5://user:pass@127.0.0.1:1080 · http://127.0.0.1:8080"
-              value={proxy}
-              onChange={(e) => { invalidateModels(); setProxy(e.target.value); }}
-            />
-            <p className="text-muted-foreground text-xs">
-              {swt("interface.m1393")}</p>
-          </div>
+              <div className="grid gap-2">
+                <Label htmlFor="p-proxy">{swt("interface.m1392")}</Label>
+                <Input
+                  id="p-proxy"
+                  className="font-mono"
+                  placeholder="socks5://user:pass@127.0.0.1:1080 · http://127.0.0.1:8080"
+                  value={proxy}
+                  onChange={(e) => { invalidateModels(); setProxy(e.target.value); }}
+                />
+                <p className="text-muted-foreground text-xs">
+                  {swt("interface.m1393")}</p>
+              </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="p-session-header">{swt("interface.m1394")}</Label>
-            <Input
-              id="p-session-header"
-              className="font-mono"
-              placeholder={swt("interface.m1395")}
-              value={sessionHeaderKey}
-              onChange={(e) => setSessionHeaderKey(e.target.value)}
-            />
-            <p className="text-muted-foreground text-xs">
-              {swt("interface.m1396")}<b>{swt("interface.m1397")}</b>{swt("interface.m1398")}</p>
-          </div>
+              <div className="grid gap-2">
+                <Label htmlFor="p-session-header">{swt("interface.m1394")}</Label>
+                <Input
+                  id="p-session-header"
+                  className="font-mono"
+                  placeholder={swt("interface.m1395")}
+                  value={sessionHeaderKey}
+                  onChange={(e) => setSessionHeaderKey(e.target.value)}
+                />
+                <p className="text-muted-foreground text-xs">
+                  {swt("interface.m1396")}<b>{swt("interface.m1397")}</b>{swt("interface.m1398")}</p>
+              </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="p-api-key">{swt("english.e100")}</Label>
-            <Input
-              id="p-api-key"
-              type="password"
-              placeholder={keyHint ? swt("interface.m1399", { p0: keyHint }) : keyPlaceholder}
-              value={apiKey}
-              onChange={(e) => { invalidateModels(); setApiKey(e.target.value); }}
-            />
-            {format === "ollama" && <p className="text-muted-foreground text-xs">{swt("providers.ollamaKeyHelp")}</p>}
-          </div>
+              <div className="grid gap-2">
+                <Label htmlFor="p-api-key">{swt("english.e100")}</Label>
+                <Input
+                  id="p-api-key"
+                  type="password"
+                  placeholder={keyHint ? swt("interface.m1399", { p0: keyHint }) : keyPlaceholder}
+                  value={apiKey}
+                  onChange={(e) => { invalidateModels(); setApiKey(e.target.value); }}
+                />
+                {format === "ollama" && <p className="text-muted-foreground text-xs">{swt("providers.ollamaKeyHelp")}</p>}
+              </div>
+            </>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="grid gap-2">

@@ -14,6 +14,7 @@ export const LLM_PROFILE_PRESET_IDS = [
   "kimi",
   "openrouter",
   "opencode-go",
+  "claude-code",
   "ollama-host",
   "ollama-docker-host",
   "ollama-compose",
@@ -38,7 +39,7 @@ export interface ZaiPresetFields {
 // The opencode-go gateway template deliberately selects effort max at the user's request;
 // every other cloud template keeps the measured economy low default.
 export interface CloudPresetFields {
-  format: "openai" | "anthropic" | "openai-responses";
+  format: "openai" | "anthropic" | "openai-responses" | "claude-code";
   model: string;
   base_url: string;
   thinking_type: "" | "disabled";
@@ -96,6 +97,9 @@ const CLOUD_TARGETS: Record<string, CloudTarget> = {
   // The gateway rejects requests without x-opencode-session (HTTP 400 MissingSessionID), so the
   // template fills the required session header.
   "opencode-go": { format: "openai", base_url: "https://opencode.ai/zen/go/v1", model: "glm-5.3-flash", thinking_type: "", reasoning_effort: "max", max_tokens_field: "", session_header_key: "x-opencode-session" },
+  // Claude Code CLI signed in with the operator's own Claude subscription (no endpoint or key).
+  // Effort is left unset so the CLI default applies.
+  "claude-code": { format: "claude-code", base_url: "", model: "claude-sonnet-5-5", thinking_type: "", reasoning_effort: "", max_tokens_field: "" },
 };
 
 export function isCloudEconomyPreset(id: string): boolean {

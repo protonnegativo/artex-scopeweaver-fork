@@ -61,6 +61,61 @@ SCOPEWEAVER_LLM_MODEL=glm-5.3-flash
 
 `SCOPEWEAVER_LLM_PROVIDER=opencode-go` resolves to the OpenAI Chat Completions wire format; an unset base URL and model default to the values in the table above.
 
+## Claude Code (Claude subscription)
+
+Runs ScopeWeaver on a Claude **Pro or Max subscription** with no API key and no API credit. Every model turn is one call to the official Claude Code CLI in print mode (`claude -p`), signed in with your own subscription. ScopeWeaver keeps its own agent loop: the CLI only returns the next assistant turn, and ScopeWeaver executes the tool calls, so intercept rules, traffic recording and the finding workflow work as with any other provider.
+
+Open **LLM → New → Configuration template** and choose **Claude Code · your Claude subscription**, or set the format to **Claude Code CLI (subscription)**.
+
+| Field | Value |
+| --- | --- |
+| Format | `claude-code` |
+| Model | `claude-sonnet-5-5` (also `claude-opus-5-5`, `claude-haiku-5-5`) |
+| Base URL, proxy, session header, API key | not used |
+| Reasoning effort | optional; passed to the CLI as `--effort` |
+| Context window (K) | `200` for compaction |
+
+### Setup
+
+1. Install Claude Code where the ScopeWeaver server runs. The Docker image already includes a pinned version (`CLAUDE_CODE_VERSION` build argument).
+2. Sign in once with your subscription:
+   - Docker: `docker compose exec -it scopeweaver claude`, then run `/login` and follow the link. The sign-in is stored in the `claude_home` volume (`CLAUDE_CONFIG_DIR=/app/claude-home`).
+   - Local binary: run `claude` and `/login` as the user that runs ScopeWeaver.
+3. Create the profile above, or set `SCOPEWEAVER_LLM_PROVIDER=claude-code` and optionally `SCOPEWEAVER_LLM_MODEL`.
+4. Use **Test connection**: it answers `OK` through the CLI.
+
+### How it calls the CLI
+
+Each turn runs the CLI from an empty temporary directory with `--tools ""`, `--setting-sources ""`, `--disable-slash-commands`, `--no-session-persistence` and `--strict-mcp-config`. Claude Code's own built-in tools, settings, hooks, skills, project `CLAUDE.md` files and any MCP servers you configured elsewhere are therefore not loaded. The host system prompt goes in `--system-prompt-file`, and the conversation goes on stdin as one `stream-json` message with one text block per turn. History renders identically on every turn, so the CLI's prompt cache serves it and only new turns are processed.
+
+ScopeWeaver's own tools are offered to the CLI as a **real MCP server** that ScopeWeaver serves in-process, on loopback with an ephemeral port and a random path, passed with `--mcp-config` and auto-approved with `--allowedTools mcp__scopeweaver`. That server executes nothing: it answers the handshake, lists the host tool schemas under their real names, and returns a placeholder for `tools/call`. The authoritative record is the `tool_use` block in the CLI's output stream, which becomes an ordinary `tool_use` for ScopeWeaver to execute. Because one assistant turn is all the host needs, the run is capped with `--max-turns 1`, so the CLI ends with `error_max_turns` on a tool-calling turn; that is expected and is treated as success when the turn produced content.
+
+Describing the tools in the system prompt and asking for them back as structured output does not work in practice: agent prompts that say "call `add_intent`" make the model attempt a native call, which fails with `No such tool available`, and no work is dispatched.
+
+Variables that would bill something other than the subscription (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, Bedrock/Vertex/Foundry switches, `CLAUDE_CODE_OAUTH_TOKEN`) are removed from the CLI's environment. `--bare` is never used, because it skips the subscription sign-in.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SCOPEWEAVER_CLAUDE_CODE_MAX_PROCS` | `1` | Concurrent CLI processes across all agents |
+| `SCOPEWEAVER_CLAUDE_BIN` | `claude` on `PATH` | CLI path |
+
+### Terms and limits
+
+- **Allowed use:** Anthropic documents running the CLI as a subprocess with `-p` and states that its developer restrictions do not prevent an end user from signing in to the unmodified Claude Code binary with their own subscription ([legal and compliance](https://code.claude.com/docs/en/legal-and-compliance), [headless mode](https://code.claude.com/docs/en/headless)). This provider never reads, copies or forwards your Claude credentials and exposes no API endpoint.
+- **Personal use only.** Do not offer this deployment to other people as a way to use your subscription. Subscription limits assume ordinary individual use of Claude Code.
+- **Usage limits:** calls count against your plan's usage limits, shared with Claude and Claude Code. A multi-agent task makes many calls; keep `SCOPEWEAVER_CLAUDE_CODE_MAX_PROCS` low and use Sonnet or Haiku for routine work. When the limit is reached, the CLI returns an error and the task stops until the limit resets.
+- **Credential exposure:** the agent's shell runs on the same host or container as the CLI. The built-in intercept rule **[Built-in] Claude Code sign-in files** denies tool calls that name `.credentials.json`, `.claude.json`, the Claude config directory or `CLAUDE_CONFIG_DIR`. It matches literal text only and is not a sandbox; keep it enabled and never mount your host `~/.claude` into the container.
+- `local_llm_only` blocks this provider, because the CLI connects to Anthropic.
+
+### Limits of the adapter
+
+- One CLI process per model turn: each turn starts a new process, so expect about 5–15 seconds per turn.
+- No live token streaming; the turn appears when the CLI finishes.
+- Thinking blocks are not replayed between turns.
+- Images in tool results are replaced by a placeholder.
+- The **LLM records** page stays empty: it is filled by the HTTP transport, which the CLI replaces. Per-round token use is still recorded on the task.
+- `MaxTokens` from the profile is not forwarded; the CLI applies the model's own output limit.
+
 ## Controlling token use
 
 Every agent turn resends the system prompt, the tool schemas and the conversation so far. Input therefore grows turn by turn until compaction shortens the history, and provider prompt caching decides how much of the repeated input is billed at the cheaper cached rate. This section answers [issue #24](https://github.com/cskwork/scopeweaver/issues/24) for cloud profiles. Native Ollama has its own safeguards, described [below](#runtime-safeguards).

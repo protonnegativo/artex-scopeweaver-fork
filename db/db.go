@@ -277,6 +277,9 @@ ON CONFLICT (name) DO NOTHING`,
 	if err := d.seedDefaultInterceptRulesV3(); err != nil {
 		return locale.Errorf("seed intercept rules v3: %w", err)
 	}
+	if err := d.seedDefaultInterceptRulesV4(); err != nil {
+		return locale.Errorf("seed intercept rules v4: %w", err)
+	}
 	if err := d.seedDefaultAssetInterceptRules(); err != nil {
 		return locale.Errorf("seed asset intercept rules: %w", err)
 	}
@@ -613,3 +616,30 @@ WHERE NOT EXISTS (SELECT 1 FROM intercept_rules WHERE name = $1)`,
 	}
 	return d.SetSetting("intercept_default_rules_v3", "done")
 }
+
+// seedDefaultInterceptRulesV4 keeps agent tools away from the Claude Code CLI's
+// sign-in files. With the claude-code provider the CLI shares the host with the
+// agent's shell, so a prompt-injected command could otherwise read the operator's
+// subscription credentials. This is defense in depth, not a sandbox: it matches
+// the literal paths and the config-dir variable in tool input.
+func (d *DB) seedDefaultInterceptRulesV4() error {
+	if v, _, _ := d.GetSetting("intercept_default_rules_v4"); v == "done" {
+		return nil
+	}
+	const name = "[Built-in] Claude Code sign-in files"
+	if _, err := d.Exec(`
+INSERT INTO intercept_rules(name, enabled, priority, match_target, match_type, pattern, action, message, timeout_enabled, timeout_seconds, timeout_action)
+SELECT $1, true, 100, 'tool_input', 'regex', $2, 'deny', $3, false, 60, 'deny'
+WHERE NOT EXISTS (SELECT 1 FROM intercept_rules WHERE name = $1)`,
+		name,
+		ClaudeCodeCredentialPattern,
+		"Access to the Claude Code CLI sign-in files (.credentials.json, .claude.json, the Claude config directory) is prohibited",
+	); err != nil {
+		return locale.Errorf("rule %q: %w", name, err)
+	}
+	return d.SetSetting("intercept_default_rules_v4", "done")
+}
+
+// ClaudeCodeCredentialPattern matches tool input that names the Claude Code CLI's
+// sign-in files or config directory.
+const ClaudeCodeCredentialPattern = `(?i)(\.credentials\.json|\.claude\.json|\.claude/|claude-home|CLAUDE_CONFIG_DIR|CLAUDE_CODE_OAUTH_TOKEN)`
